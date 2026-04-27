@@ -3,6 +3,7 @@ from functools import wraps
 from flask import (Flask, flash, redirect, render_template, request, session, url_for)
 import config
 from db import get_db, query
+from password_utils import hash_password, password_needs_hash, verify_password
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 
@@ -23,7 +24,7 @@ def required(role=None):
 @app.before_request
 def keep_users_in_their_area():
     # customers only get the screens they are supposed to use.
-    if session.get('role') == 'customer' and request.endpoint not in {'static', 'login', 'logout', 'register','appointments','appointment_add','purchases', 'services'}:
+    if session.get('role') == 'customer' and request.endpoint not in {'static', 'login', 'logout', 'register','appointments','appointment_add', 'services'}:
         return redirect(url_for('appointments'))
     # technicians can see the queue, their schedule, and service list.
     if session.get('role') == 'technician' and request.endpoint not in {'static', 'login', 'logout', 'appointments','appointment_accept', 'appointment_complete', 'technician_schedule', 'services'}:
@@ -41,18 +42,28 @@ def login():
             return redirect(url_for('customers'))
         return redirect(url_for('appointments'))
     if request.method == 'POST':
-        if request.form.get('username', '').strip() == config.ADMIN_USERNAME and request.form.get('password', '').strip() == config.ADMIN_PASSWORD:
-            session['user'] = request.form.get('username', '').strip()
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        admin_password_hash = getattr(config, 'ADMIN_PASSWORD_HASH', None)
+        admin_pw_check = (verify_password(password, admin_password_hash) if admin_password_hash else password == config.ADMIN_PASSWORD)
+        if username == config.ADMIN_USERNAME and admin_pw_check:
+            session['user'] = username
             session['role'] = 'admin'
             return redirect(url_for('customers'))
         # customers sign in with phone number and password.
         customer = query(
             '''
-                SELECT customerID, customer_name
+                SELECT customerID, customer_name, password
                 FROM customer
-                WHERE phone_number = %s AND password = %s''',
-            (request.form.get('username', '').strip(), request.form.get('password', '').strip()), one=True)
-        if customer:
+                WHERE phone_number = %s''',
+            (username,), one=True)
+        if customer and verify_password(password, customer['password']):
+            if password_needs_hash(customer['password']):
+                query(
+                    'UPDATE customer SET password=%s WHERE customerID=%s',
+                    (hash_password(password), customer['customerID']),
+                    commit=True,
+                )
             session['user'] = customer['customer_name']
             session['role'] = 'customer'
             session['customer_id'] = customer['customerID']
@@ -60,11 +71,17 @@ def login():
         # technicians use the same phone/password login.
         technician = query(
             '''
-                SELECT technicianID, technician_name
+                SELECT technicianID, technician_name, password
                 FROM technician
-                WHERE phone = %s AND password = %s''',
-            (request.form.get('username','').strip(), request.form.get('password', '').strip()), one=True)
-        if technician:
+                WHERE phone = %s''',
+            (username,), one=True)
+        if technician and verify_password(password, technician['password']):
+            if password_needs_hash(technician['password']):
+                query(
+                    'UPDATE technician SET password=%s WHERE technicianID=%s',
+                    (hash_password(password), technician['technicianID']),
+                    commit=True,
+                )
             session['user'] = technician['technician_name']
             session['role'] = 'technician'
             session['technician_id'] = technician['technicianID']
@@ -75,13 +92,18 @@ def login():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
+        # if missing information in register form make them do it again
         if not request.form.get('customer_name', '').strip() or not request.form.get('phone_number', '').strip() or not request.form.get('password', '').strip():
             flash('Name, phone number, and password are required.', 'warning')
             return render_template('customer_form.html', action='Register', customer=None)
+        # otherwise connect to db and submit form
         conn = get_db(customer=True)
         try:
             with conn.cursor() as cur:
-                cur.execute('CALL customer_register(%s, %s, %s, @new_customer_id)', (request.form.get('customer_name', '').strip(),request.form.get('phone_number', '').strip(), request.form.get('password', '').strip()))
+                # used stored procedure here for more safety at DB and application level, customer submits name, p#, and their hashed pw
+                cur.execute(
+                    'CALL customer_register(%s, %s, %s, @new_customer_id)',
+                    (request.form.get('customer_name', '').strip(), request.form.get('phone_number', '').strip(), hash_password(request.form.get('password', '').strip()),),)
                 while cur.nextset():
                     pass
                 cur.execute('SELECT @new_customer_id AS customerID')
@@ -105,6 +127,7 @@ def logout():
 @app.route('/customers', endpoint='customers')
 @required("admin")
 def cstmrs():
+    # display the customers in the customer page by selecting the tuples from customer DB
     search = request.args.get('search', '').strip()
     if search:
         rows = query(
@@ -123,9 +146,11 @@ def cstmrs():
 @required("admin")
 def cstmr(cid):
     customer = query('SELECT * FROM customer WHERE customerID = %s', (cid,), one=True)
+    # reroute if try to access url for a customer that isn't there
     if not customer:
         flash('Customer not found.', 'warning')
         return redirect(url_for('customers'))
+    # if doing post request that meas updating so get the name and phone and the customer info
     if request.method == 'POST':
         name = request.form['customer_name'].strip()
         phone = request.form['phone_number'].strip()
@@ -146,16 +171,19 @@ def cstmr(cid):
 def appointments():
     date_filter = request.args.get('date', '').strip()
     status_filter = request.args.get('status', '').strip()
+    # if customer is viewing the appointment page different things happen for them
     if session.get('role') == 'customer':
         conn = get_db(customer=True, customer_id=session.get('customer_id'))
         try:
             with conn.cursor() as cur:
+                # view their apppointments through their procedure to make it more secure
                 cur.execute('CALL customer_view_appointments()')
                 rows = cur.fetchall()
         finally:
             conn.close()
         if date_filter:
             filtered_rows = []
+            # format nicely
             for row in rows:
                 appointment_value = row.get('appointment_date')
                 if hasattr(appointment_value, 'date'):
@@ -167,10 +195,13 @@ def appointments():
             rows = filtered_rows
         return render_template('appointments.html', appointments=rows, technicians=[], date_filter=date_filter, tech_filter='', status_filter='')
 
+    # if role is technician
     if session.get('role') == 'technician':
         if status_filter not in ('pending', 'completed'):
+            # default filter to pending
             status_filter = 'pending'
 
+        # need to get the customer name, date, servces, and status of appointments for a technician to view
         if status_filter == 'completed':
             sql = '''
                 SELECT a.appointmentID, c.customer_name, a.appointment_date, GROUP_CONCAT(o.service_name ORDER BY o.service_name SEPARATOR ", ") AS services, a.status
@@ -190,6 +221,7 @@ def appointments():
                 WHERE a.status = 'pending'
             '''
             args = []
+        # if they also filter by date just append the sql query
         if date_filter:
             sql += ' AND DATE(a.appointment_date) = %s'
             args.append(date_filter)
@@ -202,6 +234,7 @@ def appointments():
 @app.route('/appointments/add', methods=['GET', 'POST'], endpoint='appointment_add')
 @required()
 def appt_add():
+    # check to see if customer is the one in the session
     if session.get('role') == 'customer':
         conn = get_db(customer=True, customer_id=session.get('customer_id'))
         try:
@@ -211,6 +244,7 @@ def appt_add():
         finally:
             conn.close()
 
+        # if customer is making an appointment need to get the date, time, and service
         if request.method == 'POST':
             appt_date = f"{request.form['appointment_date']} {request.form['appointment_time']}"
             if not request.form.getlist('service_name'):
@@ -227,10 +261,8 @@ def appt_add():
                 request.form.getlist('service_name'),
                 one=True,
             )
-            if service_total['service_count'] != len(request.form.getlist('service_name')):
-                flash('Please choose valid services.', 'warning')
-                return redirect(url_for('appointment_add'))
 
+            # once dat is gathered pass it into DB to persist
             conn = get_db(customer=True, customer_id=session.get('customer_id'))
             try:
                 with conn.cursor() as cur:
@@ -265,6 +297,7 @@ def appt_accept(aid):
     conn = get_db()
     try:
         with conn.cursor() as cur:
+            # get the apppointment they are trying to add
             cur.execute(
                 '''
                     SELECT appointmentID
@@ -273,17 +306,20 @@ def appt_accept(aid):
                     FOR UPDATE''',
                 (aid,))
             appointment = cur.fetchone()
+            # if someone else just clicked it then prevent them from adding it too
             if not appointment:
                 flash('Appointment is no longer pending.', 'warning')
                 return redirect(url_for('appointments'))
             cur.execute(
                 'SELECT appointmentID FROM schedules WHERE appointmentID = %s',
                 (aid,))
+            # check to see if this exists in another techs schedule
             if cur.fetchone():
                 flash('Appointment is already on a technician schedule.', 'warning')
                 return redirect(url_for('appointments'))
+            # otherwise safe for tech to add it into theres by accepting
             cur.execute(
-                'INSERT INTO schedules (technicianID, appointmentID) VALUES (%s,%s)',
+                'INSERT INTO schedules (technicianID, appointmentID) VALUES (%s,%s)', # insert into corresponding schedule
                 (session.get('technician_id'), aid,))
             cur.execute(
                 '''
@@ -295,7 +331,7 @@ def appt_accept(aid):
                         FROM technician_schedule
                         WHERE technicianID = %s AND technician_date = DATE(appointment.appointment_date) AND start_time = TIME(appointment.appointment_date)
                      )''',
-                (session.get('technician_id'), aid, session.get('technician_id'))
+                (session.get('technician_id'), aid, session.get('technician_id')) # insert into corresponding technician schedule. This happens because technician controls their own schedule and this is how
             )
             cur.execute(
                 "UPDATE appointment SET status = 'assigned' WHERE appointmentID = %s",
@@ -317,7 +353,7 @@ def tech_sched():
     date_filter = request.args.get('date', '').strip()
     status_filter = request.args.get('status', 'assigned').strip()
     if status_filter not in ('assigned', 'completed', 'all'):
-        status_filter = 'assigned'
+        status_filter = 'assigned' # default status to assigned/incomplete
 
     sql = '''
         SELECT a.appointmentID, c.customer_name, a.appointment_date, GROUP_CONCAT(o.service_name ORDER BY o.service_name SEPARATOR ", ") AS services, a.status
@@ -331,6 +367,7 @@ def tech_sched():
     if status_filter != 'all':
         sql += ' AND a.status = %s'
         args.append(status_filter)
+    # appened if they also sort or filter by date
     if date_filter:
         sql += ' AND DATE(a.appointment_date) = %s'
         args.append(date_filter)
@@ -345,6 +382,7 @@ def tech_sched():
 @app.route('/appointments/<int:aid>/complete', methods=['POST'], endpoint='appointment_complete')
 @required("technician")
 def appt_done(aid):
+    # update if tech marks an appt as compte
     query(
         '''
             UPDATE appointment a
@@ -354,29 +392,6 @@ def appt_done(aid):
             (aid, session.get('technician_id')), commit=True, )
     flash('Appointment marked complete.', 'success')
     return redirect(url_for('technician_schedule'))
-
-
-@app.route('/purchases')
-@required()
-def purchases():
-    if session.get('role') == 'customer':
-        conn = get_db(customer=True, customer_id=session.get('customer_id'))
-        try:
-            with conn.cursor() as cur:
-                cur.execute('CALL customer_view_purchases()')
-                rows = cur.fetchall()
-        finally:
-            conn.close()
-    else:
-        rows = query(
-            '''
-                SELECT p.purchaseID, p.customerID, c.customer_name, p.cost, p.purchase_date
-                FROM purchase p
-                JOIN customer c ON p.customerID = c.customerID
-                ORDER BY p.purchase_date DESC, p.purchaseID DESC'''
-        )
-    return render_template('purchases.html', purchases=rows)
-
 
 @app.route('/services')
 @required()
