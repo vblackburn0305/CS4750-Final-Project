@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Book Appointment{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2><i class="bi bi-calendar-plus me-2" style="color:#e91e8c;"></i>Book New Appointment</h2>
+</div>
+<div class="card border-0 shadow-sm rounded-4 p-4" style="max-width:540px;">
+  <form method="POST">
+    {% if session.role == 'admin' %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Customer</label>
+        <select name="customerID" class="form-select" required>
+          <option value="">— Select customer —</option>
+          {% for c in customers %}
+          <option value="{{ c.customerID }}">{{ c.customer_name }} ({{ c.phone_number }})</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Services</label>
+      <div class="border rounded-3 p-2 bg-white" style="max-height:220px;overflow-y:auto;">
+        {% for s in services %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="service_name" value="{{ s.service_name }}" id="service-{{ loop.index }}">
+            <label class="form-check-label" for="service-{{ loop.index }}">
+              {{ s.service_name }} — ${{ "%.2f"|format(s.service_cost|float) }}
+            </label>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-text">Select one or more services.</div>
+    </div>
+    {% if session.role == 'admin' %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Technician</label>
+        <select name="technicianID" class="form-select" required>
+          <option value="">— Select technician —</option>
+          {% for t in technicians %}
+          <option value="{{ t.technicianID }}">{{ t.technician_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    {% if session.role == 'customer' %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Appointment Date</label>
+        <input type="date" name="appointment_date" class="form-control" value="{{ today }}" required/>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Appointment Time</label>
+        <select name="appointment_time" class="form-select" required>
+          {% for time, label in customer_times %}
+            <option value="{{ time }}">
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    {% else %}
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Appointment Date and Time</label>
+        <input type="datetime-local" name="appointment_date" class="form-control" value="{{ now }}" step="300" required/>
+      </div>
+    {% endif %}
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-accent">Book Appointment</button>
+      <a href="{{ url_for('appointments') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

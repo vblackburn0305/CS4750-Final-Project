@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}My Schedule{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2><i class="bi bi-calendar-week me-2" style="color:#e91e8c;"></i>My Schedule</h2>
+</div>
+
+<form method="GET" class="mb-4">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label small fw-semibold mb-1">Date</label>
+      <input type="date" name="date" class="form-control" value="{{ date_filter }}"/>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small fw-semibold mb-1">Status</label>
+      <select name="status" class="form-select">
+        <option value="assigned" {{ 'selected' if status_filter == 'assigned' }}>Assigned</option>
+        <option value="completed" {{ 'selected' if status_filter == 'completed' }}>Completed</option>
+        <option value="all" {{ 'selected' if status_filter == 'all' }}>All</option>
+      </select>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-secondary" type="submit">Filter</button>
+      <a href="{{ url_for('technician_schedule') }}" class="btn btn-outline-danger ms-1">Clear</a>
+    </div>
+  </div>
+</form>
+
+<div class="table-card">
+  <div class="card-header">{{ appointments|length }} appointment{{ 's' if appointments|length != 1 }}</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th>Date</th>
+          <th>Services</th>
+          <th>Status</th>
+          <th class="text-end">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in appointments %}
+        <tr>
+          <td><strong>{{ a.customer_name }}</strong></td>
+          <td>{{ a.appointment_date }}</td>
+          <td><span class="text-muted small">{{ a.services or '—' }}</span></td>
+          <td>
+            {% if a.status == 'completed' %}
+              <span class="badge text-bg-success">completed</span>
+            {% else %}
+              <span class="badge text-bg-primary">assigned</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if a.status == 'assigned' %}
+              <form method="POST" action="{{ url_for('appointment_complete', aid=a.appointmentID) }}" class="d-inline">
+                <button class="btn btn-sm btn-outline-success">
+                  <i class="bi bi-check2-circle"></i> Complete
+                </button>
+              </form>
+            {% else %}
+              <span class="text-muted small">Done</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">No scheduled appointments.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

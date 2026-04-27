@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ action }} Customer{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2><i class="bi bi-person-plus me-2" style="color:#e91e8c;"></i>{{ action }} Customer</h2>
+</div>
+<div class="card border-0 shadow-sm rounded-4 p-4" style="max-width:480px;">
+  <form method="POST">
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Full Name</label>
+      <input type="text" name="customer_name" class="form-control"
+             value="{{ customer.customer_name if customer else '' }}" required/>
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Phone Number</label>
+      <input type="text" name="phone_number" class="form-control" placeholder="434-000-0000"
+             value="{{ customer.phone_number if customer else '' }}" required/>
+    </div>
+    {% if action == 'Register' %}
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Password</label>
+        <input type="password" name="password" class="form-control" required/>
+      </div>
+    {% endif %}
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-accent">{{ action }} Customer</button>
+      {% if action == 'Register' %}
+        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary">Cancel</a>
+      {% else %}
+        <a href="{{ url_for('customers') }}" class="btn btn-outline-secondary">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

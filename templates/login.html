@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div style="width:100%;max-width:400px;margin:0 auto;">
+  <div class="text-center mb-4">
+    <div style="font-size:2.5rem;color:#e91e8c;"><i class="bi bi-gem"></i></div>
+    <h3 style="font-weight:700;color:#1a1a2e;">Nail Salon</h3>
+    <p class="text-muted small">Salon Management System</p>
+  </div>
+  <div class="card border-0 shadow-sm rounded-4 p-4">
+    <h5 class="fw-bold mb-3">Sign In</h5>
+    <form method="POST">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Phone Number</label>
+        <input type="text" name="username" class="form-control form-control-lg rounded-3" placeholder="000-000-0000" required autofocus/>
+        <div class="form-text">Include dashes in your phone number.</div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Password</label>
+        <input type="password" name="password" class="form-control form-control-lg rounded-3" required/>
+      </div>
+      <button type="submit" class="btn btn-accent w-100 btn-lg rounded-3">Sign In</button>
+    </form>
+    <div class="text-center mt-3">
+      <span class="text-muted small">New customer?</span>
+      <a href="{{ url_for('register') }}" class="fw-semibold text-decoration-none">Create an account</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

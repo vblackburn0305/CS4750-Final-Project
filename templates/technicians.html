@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Technicians{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <h2><i class="bi bi-person-badge me-2" style="color:#e91e8c;"></i>Technicians</h2>
+  <button class="btn btn-accent" data-bs-toggle="modal" data-bs-target="#addModal">
+    <i class="bi bi-plus-lg me-1"></i>Add Technician
+  </button>
+</div>
+
+<div class="table-card">
+  <div class="card-header">{{ technicians|length }} technician{{ 's' if technicians|length != 1 }}</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Total Appointments</th><th class="text-end">Action</th></tr></thead>
+      <tbody>
+        {% for t in technicians %}
+        <tr>
+          <td class="text-muted">{{ t.technicianID }}</td>
+          <td><strong>{{ t.technician_name }}</strong></td>
+          <td>{{ t.phone }}</td>
+          <td><span class="badge text-bg-light text-dark">{{ t.total_appts }}</span></td>
+          <td class="text-end">
+            <form method="POST" action="{{ url_for('technician_delete', tid=t.technicianID) }}" class="d-inline"
+                  onsubmit="return confirm('Remove {{ t.technician_name }}?')">
+              <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center text-muted py-4">No technicians.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content rounded-4">
+      <form method="POST" action="{{ url_for('technician_add') }}">
+        <div class="modal-header"><h5 class="modal-title">Add Technician</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Full Name</label>
+            <input type="text" name="technician_name" class="form-control" required/>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Phone</label>
+            <input type="text" name="phone" class="form-control" placeholder="434-000-0000" required/>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-accent">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

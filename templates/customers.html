@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center">
+  <h2><i class="bi bi-people me-2" style="color:#e91e8c;"></i>Customers</h2>
+</div>
+
+<!-- Search -->
+<form method="GET" class="mb-4">
+  <div class="input-group" style="max-width:420px;">
+    <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+    <input type="text" name="search" class="form-control" placeholder="Search by name or phone…" value="{{ search }}"/>
+    <button class="btn btn-outline-secondary" type="submit">Search</button>
+    {% if search %}<a href="{{ url_for('customers') }}" class="btn btn-outline-danger">Clear</a>{% endif %}
+  </div>
+</form>
+
+<div class="table-card">
+  <div class="card-header">
+    {{ customers|length }} customer{{ 's' if customers|length != 1 }}
+    {% if search %} matching "<strong>{{ search }}</strong>"{% endif %}
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr><th>Name</th><th>Phone</th><th class="text-end">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for c in customers %}
+        <tr>
+          <td><strong>{{ c.customer_name }}</strong></td>
+          <td>{{ c.phone_number }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('customer_edit', cid=c.customerID) }}" class="btn btn-sm btn-outline-primary me-1"><i class="bi bi-pencil"></i></a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="text-center text-muted py-4">No customers found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
